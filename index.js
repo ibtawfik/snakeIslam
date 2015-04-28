@@ -1,8 +1,8 @@
 /**
  * Created by islam on 4/12/15.
  */
-angular.module('myApp', []).run(['realTimeService','randomService',
-function(realTimeService, randomService){
+angular.module('myApp', []).run(['$translate','realTimeService','randomService',
+function($translate, realTimeService, randomService){
     'use strict';
 
     var canvasWidth = 300;
@@ -24,6 +24,7 @@ function(realTimeService, randomService){
         var allSnakes =[];
         var allScores =[];
         var food;
+        var obsticles=[];
         var foodCreatedCount = 0;
         var currentDirection = 'right';
         var matchController = null;
@@ -33,10 +34,23 @@ function(realTimeService, randomService){
          *
          * Primary API functions
          *********************************************************************/
+         function resetGame(params){
+            var numberOfPlayers = params.playersInfo.length;
+            isGameOver = false;
+            allScores=[];
+            for(var i = 0; i<numberOfPlayers;i++){
+                allScores.push(0);
+            }
+            obsticles=[];
+            currentDirection = 'right';
+            foodCreatedCount = 0;
 
+
+        }
 
         //initalize the game
         function gotStartMatch(params){
+            resetGame(params);
             //a snake is an array of each block in the snake
             playerIndex = params.yourPlayerIndex;
             matchController = params.matchController;
@@ -56,7 +70,9 @@ function(realTimeService, randomService){
         }
 
         function gotEndMatch(endMatchScores){
-
+            allScores = endMatchScores;
+            isGameOver = true;
+            stopDrawing();
         }
 
         //send a messae to other players, not implemented this week
@@ -81,7 +97,8 @@ function(realTimeService, randomService){
            var nextCoordinate = move(playerIndex);
 
             if(!isOnBoard(nextCoordinate.x,nextCoordinate.y) ||
-                hasCollidedWithBody(nextCoordinate.x,nextCoordinate.y, playerIndex)){
+                hasCollidedWithBody(nextCoordinate.x,nextCoordinate.y, playerIndex) ||
+                hasCollidedWithObsticle(nextCoordinate.x,nextCoordinate.y,playerIndex)){
 
                 endMatch();
                 return;
@@ -89,6 +106,7 @@ function(realTimeService, randomService){
 
            if(hasFood(nextCoordinate.x,nextCoordinate.y)){
                allScores[playerIndex]++;
+               createObsticale(playerIndex);
                createFood();
            }else{
                allSnakes[playerIndex].shift();
@@ -110,13 +128,85 @@ function(realTimeService, randomService){
             }
 
             function createFood(){
-                food = {
-                    x:randomService.randomFromTo(foodCreatedCount, 0, numberOfColumns),
-                    y:randomService.randomFromTo(foodCreatedCount + 1, 0, numberOfRows)
-                };
+                var x = randomService.randomFromTo(foodCreatedCount, 0, numberOfColumns);
+                var y = randomService.randomFromTo(foodCreatedCount, 0, numberOfColumns);
+
+                while(hasObsticle(x,y)){
+                    foodCreatedCount++;
+                    x = randomService.randomFromTo(foodCreatedCount, 0, numberOfColumns);
+                    y = randomService.randomFromTo(foodCreatedCount, 0, numberOfColumns);
+                }
 
                 foodCreatedCount++;
+                food = {
+                    x:x,
+                    y:y
+                };
+
+
                 updateSpeed();
+            }
+
+
+        function hasObsticle(x,y){
+            for (var i = 0; i < obsticles.length;i++){
+                if(obsticles[i].x === x && obsticles[i].y === y){
+                    return true;
+                }else{
+                    return false;
+                }
+            }
+        }
+
+        /**
+         * When a snake eats food leave an obsticle behind it.
+         * @param snakeIndex
+         */
+            function createObsticale(snakeIndex){
+                //at the tail of the snake create an obsticle
+                var snake = allSnakes[snakeIndex];
+                var tailCoordinates = snake[0];
+                var x = tailCoordinates.x;
+                var y = tailCoordinates.y;
+                var direction = tailDirection(snakeIndex);
+
+                if(direction === 'left'){
+                    x--;
+                    x--;
+
+                }else if(direction === 'right'){
+                    x++;
+                    x++;
+
+                }else if(direction === 'up'){
+                    y--;
+                    y--;
+
+                }else if(direction === 'down'){
+                    y++;
+                    y++;
+                }
+
+                obsticles.push({x:x, y:y});
+            }
+            //Checks the direction of the tail so that we can place obstacles appropriately
+            function tailDirection(snakeIndex){
+                var snake = allSnakes[snakeIndex];
+                var tailCoordinates = snake[0];
+                var nextCoordinate = snake [1];
+
+                if(tailCoordinates.x > nextCoordinate.x){
+                    return 'left';
+                }else if(tailCoordinates.x < nextCoordinate.x){
+                    return 'right';
+                }else if(tailCoordinates.y > nextCoordinate.y){
+                    return 'up';
+                }else{
+                    return 'down';
+                }
+
+
+
             }
 
             function updateSpeed(){
@@ -192,6 +282,17 @@ function(realTimeService, randomService){
             return false;
         }
 
+        function hasCollidedWithObsticle(x,y,snakeIndex){
+            for(var i = 0 ; i < obsticles.length; i++){
+
+                if(obsticles[i].x === x && obsticles[i].y === y){
+                    return true;
+                }
+
+            }
+            return false;
+        }
+
         function endMatch(){
             isGameOver = true;
             matchController.endMatch(allScores);
@@ -199,7 +300,7 @@ function(realTimeService, randomService){
         }
 
         function isOnBoard(x,y){
-            if(x < 0 || x > canvasWidth || y < 0 || y > canvasHeight){
+            if(x < 0 || x >= numberOfRows || y < 0 || y >= numberOfColumns){
                 return false;
             }else{
                 return true;
@@ -231,11 +332,15 @@ function(realTimeService, randomService){
 
             drawSnake(playerIndex);
             drawFood(food.x,food.y);
+            drawObsticles();
+            //drawScores();
         }
 
         function reDrawBoard(){
+
             context.fillstyle = "black";
             context.fillRect(0,0,canvasWidth,canvasHeight);
+
         }
 
         function drawSnake(snakeIndex){
@@ -248,20 +353,52 @@ function(realTimeService, randomService){
             }
         }
 
+        function drawObsticles(){
+            for (var i = 0; i < obsticles.length; i++){
+                var cell = obsticles[i];
+                drawObsitcle(cell.x, cell.y);
+            }
+        }
+
+        function drawObsitcle(x,y){
+            //Why is the entire board being painted with the fillstyle??
+
+            context.fillStyle = "red";
+            context.fillRect(x * cellWidth, y * cellHeight, cellWidth, cellHeight);
+            context.strokeStyle = 'white';
+            context.strokeRect(x * cellWidth, y * cellHeight, cellWidth, cellHeight)
+
+        }
+
         function drawSnakeBodyPart(x,y,snakeIndex){
             var color = playerColor[snakeIndex];
 
             context.fillStyle = color;
             context.fillRect(x * cellWidth, y * cellHeight, cellWidth ,cellHeight);
+
         }
 
         //Seprate function because going to change to an image instead of a block
         function drawFood(x,y){
+
             context.fillStyle = 'green';
             context.fillRect(x * cellWidth, y * cellHeight,cellWidth,cellHeight);
 
             context.strokeStyle = "white";
             context.strokeRect(x * cellWidth, y * cellHeight, cellWidth, cellHeight);
+
+        }
+
+        function drawScores(){
+            for (var i = 0; i < allScores.length; i++) {
+                context.font = '12px sans-serif';
+                var color = playerColor[i];
+                context.fillStyle = color;
+                var msg = $translate.instant("COLOR_SCORE_IS",
+                    {color: $translate.instant(color.toUpperCase()), score: "" + allScores[i]});
+                context.fillText(msg,
+                        5 + i * canvasWidth / allSnakes.length, canvasHeight - 5);
+            }
         }
 
         /*********************************************************************
