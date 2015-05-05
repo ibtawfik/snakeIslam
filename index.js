@@ -1,8 +1,8 @@
 /**
  * Created by islam on 4/12/15.
  */
-angular.module('myApp', []).run(['$translate','realTimeService','randomService',
-function($translate, realTimeService, randomService){
+angular.module('myApp', ['ngTouch','ui.bootstrap']).run(['$translate','realTimeService','randomService','$log',
+function($translate, realTimeService, randomService,$log){
     'use strict';
 
     var canvasWidth = 300;
@@ -338,9 +338,8 @@ function($translate, realTimeService, randomService){
 
         function reDrawBoard(){
 
-            context.fillstyle = "black";
+            context.fillStyle = "black";
             context.fillRect(0,0,canvasWidth,canvasHeight);
-
         }
 
         function drawSnake(snakeIndex){
