@@ -13,6 +13,7 @@ function($translate, realTimeService, randomService,$log){
     var numberOfColumns = canvasWidth/cellWidth;
     var drawingSpeed = 120;
     var drawingInterval;
+    var yourPlayerIndex = null;
 
     var playerColor = ['blue','red','brown','purple', 'pink','yellow','orange','silver'];
 
@@ -30,6 +31,8 @@ function($translate, realTimeService, randomService,$log){
         var matchController = null;
         var playerIndex = null;
         var isGameOver = false;
+        var isSinglePlayer = null;
+        var startMatchTime = null;
         /*********************************************************************
          *
          * Primary API functions
@@ -39,6 +42,7 @@ function($translate, realTimeService, randomService,$log){
             isGameOver = false;
             allScores=[];
             for(var i = 0; i<numberOfPlayers;i++){
+                allSnakes[i] = createSnake(i);
                 allScores.push(0);
             }
             obsticles=[];
@@ -51,22 +55,29 @@ function($translate, realTimeService, randomService,$log){
         //initalize the game
         function gotStartMatch(params){
             resetGame(params);
+            playerIndex = yourPlayerIndex = params.yourPlayerIndex;
+            isSinglePlayer = params.playersInfo.length === 1;
             //a snake is an array of each block in the snake
-            playerIndex = params.yourPlayerIndex;
             matchController = params.matchController;
-
-            //Create current snake, will change when going to mutiplayer
-            allSnakes[playerIndex] = createSnake(playerIndex);
-
             //Create the first food
             createFood();
+            startMatchTime = new Date().getTime();
             updateSpeed();
 
         }
 
         //update the match state
         function gotMessage(params){
-
+            var fromPlayerIndex = params.fromPlayerIndex;
+            var messageString = params.message;
+            // {f: foodCreatedNum, s: score, a: snake_array}
+            // The array representing the cells of a player's snake.
+            var messageObject = angular.fromJson(messageString);
+            allSnakes[fromPlayerIndex] = messageObject.a;
+            allScores[fromPlayerIndex] = messageObject.s;
+            while (foodCreatedCount < messageObject.f) {
+                createFood();
+            }
         }
 
         function gotEndMatch(endMatchScores){
@@ -77,9 +88,14 @@ function($translate, realTimeService, randomService,$log){
 
         //send a messae to other players, not implemented this week
         function sendMessage(isReliable){
-            if(isReliable){
+            if (isSinglePlayer || !isGameOngoing) {
+                return; // No need to send messages if you're the only player or game is over.
+            }
+            var messageString = angular.toJson(
+                {f: foodCreatedCount, s: allScores[yourPlayerIndex], a: allSnakes});
+            if (isReliable) {
                 matchController.sendReliableMessage(messageString);
-            }else{
+            } else {
                 matchController.sendUnreliableMessage(messageString);
             }
         }
@@ -94,6 +110,13 @@ function($translate, realTimeService, randomService,$log){
                return;
            }
 
+            var secondsFromStart =Math.floor((new Date().getTime() - startMatchTime) / 1000);
+
+            if(secondsFromStart < 3){
+                draw();
+                drawCountDown(secondsFromStart);
+                return;
+            }
            var nextCoordinate = move(playerIndex);
 
             if(!isOnBoard(nextCoordinate.x,nextCoordinate.y) ||
@@ -112,6 +135,8 @@ function($translate, realTimeService, randomService,$log){
                allSnakes[playerIndex].shift();
            }
                allSnakes[playerIndex].push(nextCoordinate);
+
+
 
            draw();
         }
@@ -333,7 +358,23 @@ function($translate, realTimeService, randomService,$log){
             drawSnake(playerIndex);
             drawFood(food.x,food.y);
             drawObsticles();
-            //drawScores();
+            drawScores();
+        }
+
+        function drawCountDown(secondsFromStart){
+            var secondsToReallyStart = 3 - secondsFromStart;
+
+            // Gives you a hint what is your color
+            var yourColor = playerColor[yourPlayerIndex];
+            context.fillStyle = yourColor;
+            context.font = '80px sans-serif';
+            context.fillText("" + secondsToReallyStart, canvasWidth / 2, canvasHeight / 2);
+
+            context.font = '20px sans-serif';
+            var msg = $translate("YOUR_SNAKE_COLOR_IS",
+                {color: $translate(yourColor.toUpperCase())});
+            context.fillText(msg, canvasWidth / 4 - 30, canvasHeight / 4 - 30);
+            return;
         }
 
         function reDrawBoard(){
@@ -393,8 +434,8 @@ function($translate, realTimeService, randomService,$log){
                 context.font = '12px sans-serif';
                 var color = playerColor[i];
                 context.fillStyle = color;
-                var msg = $translate.instant("COLOR_SCORE_IS",
-                    {color: $translate.instant(color.toUpperCase()), score: "" + allScores[i]});
+                var msg = $translate("COLOR_SCORE_IS",
+                    {color: $translate(color.toUpperCase()), score: "" + allScores[i]});
                 context.fillText(msg,
                         5 + i * canvasWidth / allSnakes.length, canvasHeight - 5);
             }
